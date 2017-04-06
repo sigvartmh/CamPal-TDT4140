@@ -12,80 +12,73 @@ from oauth2client.file import Storage
 
 import datetime
 
+#flags.DEFINE_boolean("verbalise", False, "say out loud while building graph")
+#flags.DEFINE_boolean("verbalise", True, "say out loud while building graph")
 
 SCOPES = 'https://www.googleapis.com/auth/calendar.readonly'
 CLIENT_SECRET_FILE = 'gcal.json'
 APPLICATION_NAME = 'CamPals scheduler'
 
-trackerQueue = queue.Queue(1)
-resultQueue = queue.Queue(1)
-tfFrame = queue.Queue()
 #fourcc = cv2.VideoWriter_fourcc('P', 'I', 'M', '1')
 fourcc = cv2.VideoWriter_fourcc(*'XVID')
 
 #out = cv2.VideoWriter('test.avi', fourcc, 20.0, (int(cap.get(WIDTH)), int(cap.get(HEIGHT))))
 ratio = 4
 #options = { "model": "cfg/tiny-yolo-voc.cfg", "load": "bin/tiny-yolo-voc.weights", "threshold": 0.5, "gpu": 1.0}
-options = { "model": "cfg/yolo-voc.cfg", "load": "bin/yolo-voc.weights", "threshold": 0.5, "gpu": 1.0}
-
-class GCalender(object):
-    def __init__(self):
-        get_credentials()
-    def get_credentials(self):
-        home_dir = os.path.expanduser('~')
-        credential_dir = os.path.join(home_dir, '.credentials')
-        if not os.path.exists(credential_dir):
-            os.makedirs(crendetial_dir)
-        credential_path = os.path.join(credential_dir, 'gcal_credentials.json')
-        store = Storage(credential_path)
-        credentials = store.get()
-
-        if not credentials or credentials.invalid:
-            flow = client.flow_from_clientsecrets(CLIENT_SECRET_FILE, SCOPES)
-            flow.user_agent = APPLICATION_NAME
-            if flags:
-                credentials = tools.run_flow(flow, store, flags)
-        self.credentials=credentials
-
-    def get_gcal_service(self):
-        http = self.credentials.authorize(httplib2.Http())
-        service = discovery.build('calendar', 'v3', http=http)
-        return service
-
-    def get_events(self):
-        service = self.get_gcal_service()
-        now = datetime.datetime.utcnow().isoformat() + 'Z'
-        eventResult = service.events.list(calendarId='primary', timeMin=now, maxResults=12, singleEvents=True, orderBy='startTime').execute()
-        return eventsResult.get('items', [])
+options = { "model": "./cfg/yolo-voc.cfg", "load": "./bin/yolo-voc.weights", "threshold": 0.5, "gpu": 1.0, "verbalise": False}
 
 class ObjectTracker(threading.Thread):
+    def __init__(self, trackerQueue, resultQueue, tfFrame):
+        super(ObjectTracker, self).__init__()
+        self.trackerQueue=trackerQueue
+        self.resultQueue=resultQueue
+        self.tfFrame=tfFrame
+
     def run(self):
         self.setup()
-        while True:
-            frame = trackerQueue.get()
-            tfframe = cv2.resize(frame, (0,0), fx=1/ratio, fy=1/ratio)
-            print(tfframe.shape)
-            result = self.tfnet.return_predict(tfframe)
-            resultQueue.put(result)
-            tfFrame.put(tfframe)
+        try:
+            while self.alive:
+            #tfframe = self.trackerQueue.get()
+                frame = self.trackerQueue.get()
+                tfframe = cv2.resize(frame, (0,0), fx=1/ratio, fy=1/ratio)
+            #print(tfframe.shape)
+                result = self.tfnet.return_predict(tfframe)
+                self.resultQueue.put(result)
+                self.tfFrame.put(tfframe)
+                if not self.alive:
+                    return
+        except:
+            pass
     def setup(self):
+        print(self.trackerQueue)
+        self.alive = True
         self.tfnet = TFNet(options)
 
+    def stop(self):
+        self.alive = False
+        #self.join()
+
+
 class VideoCapture():
+    def __init__(self, trackerQueue, resultQueue, tfFrame):
+        self.trackerQueue = trackerQueue
+        self.resultQueue = resultQueue
+        self.tfFrame = tfFrame
+
     def run(self):
         self.setup()
         while True:
             ret, frame = self.cap.read()
-            if(trackerQueue.empty()):
-                trackerQueue.put_nowait(frame)
-            elif(trackerQueue.full()):
-                trackerQueue.get_nowait()
-            if(resultQueue.full()):
-                self.results = resultQueue.get()
+            if(self.trackerQueue.empty()):
+                self.trackerQueue.put_nowait(frame)
+            elif(self.trackerQueue.full()):
+                self.trackerQueue.get_nowait()
+            if(self.resultQueue.full()):
+                self.results = self.resultQueue.get()
             if(self.results):
                 for item in self.results:
                     try:
-                        (pt1, pt2) = self.findPerson(item)
+                        (pt1, pt2) = self.findPerson(item, ratio)
                         #print("{0} and {1}".format(pt1,pt2))
                         cv2.rectangle(frame, pt1, pt2, (255,0,0), 2)
                         cv2.rectangle(frame, (pt1[0]-1,pt1[1]-1), (pt1[0]+150,pt1[1]-30), (255,0,0), -1)
@@ -94,8 +87,8 @@ class VideoCapture():
                     except:
                         pass
             cv2.imshow('frame',frame)
-            if not tfFrame.empty():
-                tfframe = tfFrame.get()
+            if not self.tfFrame.empty():
+                tfframe = self.tfFrame.get()
                 cv2.imshow('tfFrame',tfframe)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
@@ -113,14 +106,17 @@ class VideoCapture():
         self.MAX_WIDTH=self.cap.get(WIDTH)
         self.MAX_HEIGHT=self.cap.get(HEIGHT)
 
-    def findPerson(self, detectedObject):
-        if(detectedObject['label'] == 'person'):
-            pt1 = (detectedObject['topleft']['x']*ratio,detectedObject['topleft']['y']*ratio)
-            pt2 = (detectedObject['bottomright']['x']*ratio,detectedObject['bottomright']['y']*ratio)
+    def findPerson(self, detectedObject, scale_ratio):
+        #if(detectedObject['label'] == 'person'):
+            pt1 = (detectedObject['topleft']['x']*scale_ratio,detectedObject['topleft']['y']*scale_ratio)
+            pt2 = (detectedObject['bottomright']['x']*scale_ratio,detectedObject['bottomright']['y']*scale_ratio)
             return (pt1, pt2)
 
 if __name__ == '__main__':
+    trackerQueue = queue.Queue(1)
+    resultQueue = queue.Queue(1)
+    tfFrame = queue.Queue()
 
-    ObjectTracker().start()
-    VideoCapture().run()
+    ObjectTracker(trackerQueue,resultQueue,tfFrame).start()
+    VideoCapture(trackerQueue,resultQueue,tfFrame).run()
 
