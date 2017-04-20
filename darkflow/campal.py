@@ -1,18 +1,21 @@
 from net.build import TFNet
 from tensorflow import flags
-
+from calender import GCalender
 import cv2
 import cProfile, pstats, io
 import queue
-from multiprocessing import Process, Queue
+from multiprocessing import Process, Queue, RLock, Event
 import datetime
+from time import sleep
 
 #flags.DEFINE_boolean("verbalise", False, "say out loud while building graph")
 #flags.DEFINE_boolean("verbalise", True, "say out loud while building graph")
 
 #fourcc = cv2.VideoWriter_fourcc('P', 'I', 'M', '1')
-fourcc = cv2.VideoWriter_fourcc(*'XVID')
-
+#fourcc = cv2.VideoWriter_fourcc(*'avc1')
+#fourcc = cv2.VideoWriter_fourcc('m', 'p', '4', 'v')
+fourcc = cv2.VideoWriter_fourcc('a', 'v', 'c', '1')
+print("fourcc:", fourcc)
 #out = cv2.VideoWriter('test.avi', fourcc, 20.0, (int(cap.get(WIDTH)), int(cap.get(HEIGHT))))
 ratio = 4
 #options = { "model": "cfg/tiny-yolo-voc.cfg", "load": "bin/tiny-yolo-voc.weights", "threshold": 0.5, "gpu": 1.0}
@@ -52,15 +55,30 @@ class ObjectTracker():#threading.Thread):
 
 
 class VideoCapture():
-    def __init__(self, trackerQueue, resultQueue, tfFrame):
+    def __init__(self, trackerQueue, resultQueue, tfFrame, startLock, endLock, recordingEvent, newfileEvent):
         self.trackerQueue = trackerQueue
         self.resultQueue = resultQueue
         self.tfFrame = tfFrame
-
+        self.startLock = startLock
+        self.endLock = endLock
+        self.recording = recordingEvent
+        self.newfile = newfileEvent
     def run(self):
         self.setup()
+        StartLockState = False
+        filename = 0
         while True:
+            self.recording.wait()
+            if self.newfile.is_set():
+                print("New file created")
+                size = (int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT)))
+                videofile = cv2.VideoWriter()
+                videofile.open('lecture_'+str(filename)+'.mkv',fourcc, 10, size)
+                self.newfile.clear()
+                filename += 1
             ret, frame = self.cap.read()
+            if ret:
+                videofile.write(frame)
             try:
                 self.trackerQueue.put_nowait(frame)
             except:
@@ -85,6 +103,10 @@ class VideoCapture():
                 cv2.imshow('tfFrame',tfframe)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
+            if not self.recording.is_set():
+                videofile.release()
+                print("Closed file")
+
 
         cap.release()
         cv2.destroyAllWindows()
@@ -100,7 +122,7 @@ class VideoCapture():
         self.MAX_HEIGHT=self.cap.get(HEIGHT)
 
     def findPerson(self, detectedObject, scale_ratio):
-        #if(detectedObject['label'] == 'person'):
+        if(detectedObject['label'] == 'person'):
             pt1 = (detectedObject['topleft']['x']*scale_ratio,detectedObject['topleft']['y']*scale_ratio)
             pt2 = (detectedObject['bottomright']['x']*scale_ratio,detectedObject['bottomright']['y']*scale_ratio)
             return (pt1, pt2)
@@ -109,8 +131,14 @@ if __name__ == '__main__':
     trackerQueue = Queue(1)
     resultQueue = Queue(1)
     tfFrame = Queue()
-
+    startRecording = Event()
+    newfile = Event()
+    startLock = RLock()
+    endLock = RLock()
+    g = GCalender("CamPal",startRecording, newfile)
+    calender=Process(target=g.start_calender_check)
     tracker=Process(target=ObjectTracker, args=(trackerQueue,resultQueue,tfFrame))
+    calender.start()
     tracker.start()
-    VideoCapture(trackerQueue,resultQueue,tfFrame).run()
+    VideoCapture(trackerQueue,resultQueue,tfFrame, startLock, endLock, startRecording, newfile).run()
 
