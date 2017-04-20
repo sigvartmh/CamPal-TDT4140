@@ -56,20 +56,56 @@ def load_old_graph(self, ckpt):
         op = tf.assign(var, plh)
         self.sess.run(op, {plh: val})
 
-def camera(self, file):
-    camera = cv2.VideoCapture(0)
+def _get_fps(self, frame):
+    elapsed = int()
+    start = timer()
+    preprocessed = self.framework.preprocess(frame)
+    feed_dict = {self.inp: [preprocessed]}
+    net_out = self.sess.run(self.out, feed_dict)[0]
+    processed = self.framework.postprocess(net_out, frame, False)
+    return timer() - start
+
+def camera(self, file, SaveVideo):
+    if file == 'camera':
+        file = 0
+    else:
+        assert os.path.isfile(file), \
+        'file {} does not exist'.format(file)
+        
+    camera = cv2.VideoCapture(file)
     self.say('Press [ESC] to quit demo')
     assert camera.isOpened(), \
     'Cannot capture source'
 
     elapsed = int()
     start = timer()
+    
+    cv2.namedWindow('', 0)
+    _, frame = camera.read()
+    height, width, _ = frame.shape
+    cv2.resizeWindow('', width, height)
+    
+    if SaveVideo:
+        fourcc = cv2.VideoWriter_fourcc(*'XVID')
+        if file == 0:
+          fps = 1 / self._get_fps(frame)
+          if fps < 1:
+            fps = 1
+        else:
+            fps = round(camera.get(cv2.CAP_PROP_FPS))
+        videoWriter = cv2.VideoWriter('video.avi', fourcc, fps, (width, height))
+
     while camera.isOpened():
         _, frame = camera.read()
+        if frame is None:
+            print ('\nEnd of Video')
+            break
         preprocessed = self.framework.preprocess(frame)
         feed_dict = {self.inp: [preprocessed]}
         net_out = self.sess.run(self.out,feed_dict)[0]
         processed = self.framework.postprocess(net_out, frame, False)
+        if SaveVideo:
+            videoWriter.write(processed)
         cv2.imshow('', processed)
         elapsed += 1
         if elapsed % 5 == 0:
@@ -81,11 +117,14 @@ def camera(self, file):
         if choice == 27: break
 
     sys.stdout.write('\n')
+    if SaveVideo:
+        videoWriter.release()
     camera.release()
     cv2.destroyAllWindows()
 
 def to_darknet(self):
     darknet_ckpt = self.darknet
+
     with self.graph.as_default() as g:
         for var in tf.global_variables():
             name = var.name.split(':')[0]
@@ -97,7 +136,6 @@ def to_darknet(self):
 
     for layer in darknet_ckpt.layers:
         for ph in layer.h:
-            # Use default
             layer.h[ph] = None
 
     return darknet_ckpt

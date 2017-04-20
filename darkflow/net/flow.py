@@ -46,13 +46,15 @@ def train(self):
         feed_dict[self.inp] = x_batch
         feed_dict.update(self.feed)
 
-        fetches = [self.train_op, loss_op] 
+        fetches = [self.train_op, loss_op, self.summary_op] 
         fetched = self.sess.run(fetches, feed_dict)
         loss = fetched[1]
 
         if loss_mva is None: loss_mva = loss
         loss_mva = .9 * loss_mva + .1 * loss
         step_now = self.FLAGS.load + i + 1
+
+        self.writer.add_summary(fetched[2], step_now)
 
         form = 'step {} - loss {} - moving ave loss {}'
         self.say(form.format(step_now, loss, loss_mva))
@@ -80,46 +82,64 @@ def return_predict(self, im):
         tmpBox = self.framework.process_box(box, h, w, threshold)
         if tmpBox is None:
             continue
-        boxesInfo.append({"label":tmpBox[4],"confidence":tmpBox[6],"topleft":{"x":tmpBox[0],"y":tmpBox[2]},"bottomright":{"x":tmpBox[1],"y":tmpBox[3]}})
+        boxesInfo.append({
+            "label": tmpBox[4],
+            "confidence": tmpBox[6],
+            "topleft": {
+                "x": tmpBox[0],
+                "y": tmpBox[2]},
+            "bottomright": {
+                "x": tmpBox[1],
+                "y": tmpBox[3]}
+        })
     return boxesInfo
+
+import math
 
 def predict(self):
     inp_path = self.FLAGS.test
-    all_inp_ = os.listdir(inp_path)
-    all_inp_ = [i for i in all_inp_ if self.framework.is_inp(i)]
-    if not all_inp_:
+    all_inps = os.listdir(inp_path)
+    all_inps = [i for i in all_inps if self.framework.is_inp(i)]
+    if not all_inps:
         msg = 'Failed to find any test files in {} .'
         exit('Error: {}'.format(msg.format(inp_path)))
 
-    batch = min(self.FLAGS.batch, len(all_inp_))
+    batch = min(self.FLAGS.batch, len(all_inps))
 
-    for j in range(len(all_inp_) // batch):
+    # predict in batches
+    n_batch = int(math.ceil(len(all_inps) / batch))
+    for j in range(n_batch):
+        from_idx = j * batch
+        to_idx = min(from_idx + batch, len(all_inps))
+
+        # collect images input in the batch
         inp_feed = list(); new_all = list()
-        all_inp = all_inp_[j*batch: (j*batch+batch)]
-        for inp in all_inp:
+        this_batch = all_inps[from_idx:to_idx]
+        for inp in this_batch:
             new_all += [inp]
             this_inp = os.path.join(inp_path, inp)
             this_inp = self.framework.preprocess(this_inp)
             expanded = np.expand_dims(this_inp, 0)
             inp_feed.append(expanded)
-        all_inp = new_all
+        this_batch = new_all
 
-        feed_dict = {self.inp : np.concatenate(inp_feed, 0)}
-    
+        # Feed to the net
+        feed_dict = {self.inp : np.concatenate(inp_feed, 0)}    
         self.say('Forwarding {} inputs ...'.format(len(inp_feed)))
         start = time.time()
         out = self.sess.run(self.out, feed_dict)
         stop = time.time(); last = stop - start
-
         self.say('Total time = {}s / {} inps = {} ips'.format(
             last, len(inp_feed), len(inp_feed) / last))
 
+        # Post processing
         self.say('Post processing {} inputs ...'.format(len(inp_feed)))
         start = time.time()
         for i, prediction in enumerate(out):
             self.framework.postprocess(prediction,
-                os.path.join(inp_path, all_inp[i]))
+                os.path.join(inp_path, this_batch[i]))
         stop = time.time(); last = stop - start
 
+        # Timing
         self.say('Total time = {}s / {} inps = {} ips'.format(
             last, len(inp_feed), len(inp_feed) / last))

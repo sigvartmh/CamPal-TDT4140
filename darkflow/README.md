@@ -2,23 +2,33 @@
 
 Real-time object detection and classification. Paper: [version 1](https://arxiv.org/pdf/1506.02640.pdf), [version 2](https://arxiv.org/pdf/1612.08242.pdf).
 
-Read more about YOLO (in darknet) and download weight files for version 2 [here](http://pjreddie.com/darknet/yolo/).
+Read more about YOLO (in darknet) and download weight files [here](http://pjreddie.com/darknet/yolo/). In case the weight file cannot be found, I uploaded some of mine [here](https://drive.google.com/drive/folders/0B1tW_VtY7onidEwyQ2FtQVplWEU), which include `yolo-full` and `yolo-tiny` of v1.0, `tiny-yolo-v1.1` of v1.1 and `yolo`, `tiny-yolo-voc` of v2.
 
-*Some* weights files for version 1 [here](https://drive.google.com/drive/folders/0B1tW_VtY7onidEwyQ2FtQVplWEU)
 
-![img](person.jpg)
+Click on this image to see demo from yolov2:
+
+[![img](preview.png)](http://i.imgur.com/EyZZKAA.gif)
 
 ## Dependencies
 
 Python3, tensorflow 1.0, numpy, opencv 3.
 
+Build Cython for fast processing:
+
+```
+cd ./cython_utils
+python3 setup.py build_ext --inplace
+cd ..
+```
+
 ## Update
+
+Demo from video file/ webcam is available, also with saving results to an output file. Cython for fast processing is available too.
 
 **Android demo is available on Tensorflow's official github!** [here](https://github.com/tensorflow/tensorflow/blob/master/tensorflow/examples/android/src/org/tensorflow/demo/TensorFlowYoloDetector.java)
 
 **I am looking for contributions:**
  - `help wanted` labels in issue track
- - post-processing using Cython
 
 ### Parsing the annotations
 
@@ -125,20 +135,24 @@ During training, the script will occasionally save intermediate results into Ten
 ./flow --train --model cfg/yolo-tiny.cfg --load bin/yolo-tiny.weights
 ```
 
-### Camera demo
+### Camera/video file demo
 
 
 For a demo that entirely runs on the CPU:
 
 ```bash
-./flow --model cfg/yolo-new.cfg --load bin/yolo-new.weights --demo camera
+./flow --model cfg/yolo-new.cfg --load bin/yolo-new.weights --demo videofile.avi
 ```
 
 For a demo that runs 100% on the GPU:
 
 ```bash
-./flow --model cfg/yolo-new.cfg --load bin/yolo-new.weights --demo camera --gpu 1.0
+./flow --model cfg/yolo-new.cfg --load bin/yolo-new.weights --demo videofile.avi --gpu 1.0
 ```
+
+To use your webcam/camera, simply replace `videofile.avi` with keyword `camera`.
+
+To save a video with predicted bounding box, add `--saveVideo` option.
 
 ### Using darkflow from another python application
 Please note that `return_predict(img)` must take an `numpy.ndarray`. Your image must be loaded beforehand and passed to `return_predict(img)`. Passing the file path won't work.
