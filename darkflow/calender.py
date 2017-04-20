@@ -6,16 +6,17 @@ from oauth2client.file import Storage
 import httplib2
 import datetime
 import os
-
+from dateutil import parser
 SCOPES = 'https://www.googleapis.com/auth/calendar.readonly'
 CLIENT_SECRET_FILE = 'gcal_credentials.json'
 APPLICATION_NAME = 'CamPals scheduler'
 
-class GCalender(object):
-    def __init__(self,name):
+class GCalender():
+    def __init__(self,name, start, stop):
         self.get_credentials()
         self.name = name
-
+        self.start = start
+        self.stop = stop
     def get_credentials(self):
         home_dir = os.path.expanduser('~')
         credential_dir = os.path.join(home_dir, '.credentials')
@@ -49,6 +50,17 @@ class GCalender(object):
         for cal in clist['items']:
             if cal['summary'] == name:
                 return cal['id']
+    def start_calender_check(self):
+        while True:
+            events = self.get_events()
+            if(events):
+                now = datetime.datetime.now().isoformat().split('.')[0]
+                starttime = parser.parse(events[0]['start']['dateTime']).isoformat().split('+')[0]
+                endttime = parser.parse(events[0]['end']['dateTime']).isoformat().split('+')[0]
+                if(starttime==now):
+                    print("Event start")
+                elif(endttime==now):
+                    print("Event ended")
 
-g = GCalender("CamPal")
-print(g.get_events())
+g = GCalender("CamPal",0,0)
+g.start_calender_check()
