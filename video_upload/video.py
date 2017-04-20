@@ -77,19 +77,14 @@ def getNextEvent():
     global nextLecture
     nextLecture = events[0]
 
-
-    #return startTime, endTime, subject, title, description
-
 def main():
-    #startTime, endTime, subject, title, description = getNextEvent()
-    #now = datetime.datetime.now().strftime("%H:%M:%S" )
-    #Check next event every minute
+
     global nextLecture
     getNextEvent()
     while(1):
         time.sleep(1)
 
-        now = datetime.datetime.now().isoformat()# 'Z' indicates UTC time
+        now = datetime.datetime.now().isoformat()
         if nextLecture != 0:
             startTime = nextLecture['start'].get('dateTime')
             endTime = nextLecture['end'].get('dateTime')
