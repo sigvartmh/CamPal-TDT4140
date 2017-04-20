@@ -3,21 +3,12 @@ from tensorflow import flags
 
 import cv2
 import cProfile, pstats, io
-import threading, queue
-
-from apiclient import discovery
-from oauth2client import client
-from oauth2client import tools
-from oauth2client.file import Storage
-
+import queue
+from multiprocessing import Process, Queue
 import datetime
 
 #flags.DEFINE_boolean("verbalise", False, "say out loud while building graph")
 #flags.DEFINE_boolean("verbalise", True, "say out loud while building graph")
-
-SCOPES = 'https://www.googleapis.com/auth/calendar.readonly'
-CLIENT_SECRET_FILE = 'gcal.json'
-APPLICATION_NAME = 'CamPals scheduler'
 
 #fourcc = cv2.VideoWriter_fourcc('P', 'I', 'M', '1')
 fourcc = cv2.VideoWriter_fourcc(*'XVID')
@@ -27,12 +18,13 @@ ratio = 4
 #options = { "model": "cfg/tiny-yolo-voc.cfg", "load": "bin/tiny-yolo-voc.weights", "threshold": 0.5, "gpu": 1.0}
 options = { "model": "./cfg/yolo-voc.cfg", "load": "./bin/yolo-voc.weights", "threshold": 0.5, "gpu": 1.0, "verbalise": False}
 
-class ObjectTracker(threading.Thread):
+class ObjectTracker():#threading.Thread):
     def __init__(self, trackerQueue, resultQueue, tfFrame):
-        super(ObjectTracker, self).__init__()
+#        super(ObjectTracker, self).__init__()
         self.trackerQueue=trackerQueue
         self.resultQueue=resultQueue
         self.tfFrame=tfFrame
+        self.run()
 
     def run(self):
         self.setup()
@@ -69,10 +61,11 @@ class VideoCapture():
         self.setup()
         while True:
             ret, frame = self.cap.read()
-            if(self.trackerQueue.empty()):
+            try:
                 self.trackerQueue.put_nowait(frame)
-            elif(self.trackerQueue.full()):
-                self.trackerQueue.get_nowait()
+            except:
+                pass
+
             if(self.resultQueue.full()):
                 self.results = self.resultQueue.get()
             if(self.results):
@@ -113,10 +106,11 @@ class VideoCapture():
             return (pt1, pt2)
 
 if __name__ == '__main__':
-    trackerQueue = queue.Queue(1)
-    resultQueue = queue.Queue(1)
-    tfFrame = queue.Queue()
+    trackerQueue = Queue(1)
+    resultQueue = Queue(1)
+    tfFrame = Queue()
 
-    ObjectTracker(trackerQueue,resultQueue,tfFrame).start()
+    tracker=Process(target=ObjectTracker, args=(trackerQueue,resultQueue,tfFrame))
+    tracker.start()
     VideoCapture(trackerQueue,resultQueue,tfFrame).run()
 
