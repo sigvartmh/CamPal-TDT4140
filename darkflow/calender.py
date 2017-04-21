@@ -115,9 +115,10 @@ class GCalender():
             else:
                 if self.start.is_set():
                     print("Event ended")
-                    send_msg(title +" has ended " + end_time)
+                    send_msg(title +" has ended " + end_time.split('T')[1].split('+')[0] + ' '+end_time.split('T')[0])
                     self.start.clear()
                     filename = self.fileQ.get()
+                    title = title + ' ' + start_time.split('T')[0]
                     print(filename, title, desc)
                     Process(target=upload_to_youtube,args=(filename, title, desc)).start()
 

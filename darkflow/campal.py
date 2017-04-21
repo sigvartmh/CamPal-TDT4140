@@ -34,6 +34,7 @@ class ObjectTracker():#threading.Thread):
         try:
             while self.alive:
             #tfframe = self.trackerQueue.get()
+                print("Taking camera frame")
                 frame = self.trackerQueue.get()
                 tfframe = cv2.resize(frame, (0,0), fx=1/ratio, fy=1/ratio)
             #print(tfframe.shape)
