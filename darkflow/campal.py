@@ -7,7 +7,7 @@ import queue
 from multiprocessing import Process, Queue, RLock, Event
 import datetime
 from time import sleep
-
+from servo import Servo
 #flags.DEFINE_boolean("verbalise", False, "say out loud while building graph")
 #flags.DEFINE_boolean("verbalise", True, "say out loud while building graph")
 
@@ -55,19 +55,29 @@ class ObjectTracker():#threading.Thread):
 
 
 class VideoCapture():
-    def __init__(self, trackerQueue, resultQueue, tfFrame, startLock, endLock, recordingEvent, newfileEvent):
+    def __init__(self, trackerQueue, resultQueue, tfFrame, startLock, endLock, recordingEvent, newfileEvent, fileQ, posQ):
         self.trackerQueue = trackerQueue
         self.resultQueue = resultQueue
         self.tfFrame = tfFrame
         self.startLock = startLock
         self.endLock = endLock
+        self.fileQ = fileQ
         self.recording = recordingEvent
         self.newfile = newfileEvent
+        self.posQ = posQ
+        #self.servo.move(str(90).encode('utf8'))
+        self.pos = 90
     def run(self):
         self.setup()
         StartLockState = False
         filename = 0
+        target = 90
+        self.posQ.put(target)
         while True:
+            try:
+                self.posQ.put_nowait(self.pos)
+            except:
+                pass
             self.recording.wait()
             if self.newfile.is_set():
                 print("New file created")
@@ -80,7 +90,8 @@ class VideoCapture():
             if ret:
                 videofile.write(frame)
             try:
-                self.trackerQueue.put_nowait(frame)
+                if ret:
+                    self.trackerQueue.put_nowait(frame)
             except:
                 pass
 
@@ -94,10 +105,21 @@ class VideoCapture():
                         cv2.rectangle(frame, pt1, pt2, (255,0,0), 2)
                         cv2.rectangle(frame, (pt1[0]-1,pt1[1]-1), (pt1[0]+150,pt1[1]-30), (255,0,0), -1)
                         cv2.putText(frame, item['label'] , (pt1[0]+2,pt1[1]-10), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,255,255),2)
-                        pos = int((((pt1[0]+pt2[0])/2)/MAX_WIDTH)*180)
+                        target = int((((pt1[0]+pt2[0])/2)/self.MAX_WIDTH)*180)
+
+                        #print("pos:", pos)
                     except:
+                        print("something failed")
                         pass
-            cv2.imshow('frame',frame)
+            if(target > 110):
+                self.pos += 0.2
+                #self.servo.move(str(self.pos).encode('utf8'))
+            elif(target < 70):
+                self.pos -= 0.2
+                #self.servo.move(str(self.pos).encode('utf8'))
+
+            if ret:
+                cv2.imshow('frame',frame)
             if not self.tfFrame.empty():
                 tfframe = self.tfFrame.get()
                 cv2.imshow('tfFrame',tfframe)
@@ -105,6 +127,7 @@ class VideoCapture():
                 break
             if not self.recording.is_set():
                 videofile.release()
+                self.fileQ.put('lecture_'+str(filename-1)+'.mkv')
                 print("Closed file")
 
 
@@ -130,15 +153,19 @@ class VideoCapture():
 if __name__ == '__main__':
     trackerQueue = Queue(1)
     resultQueue = Queue(1)
+    posQ = Queue(1)
+    fileQ=Queue(1)
     tfFrame = Queue()
     startRecording = Event()
     newfile = Event()
     startLock = RLock()
     endLock = RLock()
-    g = GCalender("CamPal",startRecording, newfile)
+    servo = Servo('/dev/tty.wchusbserial1420', posQ)
+    g = GCalender("CamPal",startRecording, newfile, fileQ)
     calender=Process(target=g.start_calender_check)
     tracker=Process(target=ObjectTracker, args=(trackerQueue,resultQueue,tfFrame))
+    servoProcess = Process(target=servo.run)
     calender.start()
     tracker.start()
-    VideoCapture(trackerQueue,resultQueue,tfFrame, startLock, endLock, startRecording, newfile).run()
-
+    servoProcess.start()
+    VideoCapture(trackerQueue,resultQueue,tfFrame, startLock, endLock, startRecording, newfile, fileQ, posQ).run()

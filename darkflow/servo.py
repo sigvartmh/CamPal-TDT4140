@@ -2,28 +2,37 @@ import serial
 from time import sleep
 
 class Servo():
-	def __init__(self,port): 
-		self.ser = serial.Serial(port, 9600, timeout=1)
+    def __init__(self,port,posQ):
+        self.ser = serial.Serial(port, 9600)
+        self.posQ = posQ
 
-	def move(self,deg):
-		self.ser.write(str(deg))
-	def pos(self):
-		return self.ser.readline();
-	
-	def close(self):
-		self.ser.close()
+    def move(self,deg):
+        #print("deg:", deg)
+        self.ser.write(deg+b'\n')
+    def run(self): #while True
+        print("running servo")
+        mov = str(90).encode('utf8')
+        while True:
+            try:
+                pos = self.posQ.get_nowait()
+                pos = int(pos)
+                print("pos get:", pos)
+                mov = str(pos).encode('utf8')
+            except:
+                pass
+            self.move(mov)
+            sleep(0.5)
+            #print("move:",mov)
+           #      self.ser.write(deg+b'\n')
+             #   except:
+                    #pass
+    def close(self):
+        self.ser.close()
 
 if __name__ == '__main__':
-	servo = Servo('/dev/ttyUSB0')
-	i=0
-	while i < 180:
-		print(i)	 
-		servo.move(i)
-		i +=10
-	
-		sleep(1)
-		try:
-			print(servo.pos())
-		except:
-			pass
-	servo.close()
+    servo = Servo('/dev/tty.wchusbserial1420', 0)
+    i = 0
+    while i < 180:
+        servo.move(str(i).encode('utf8'))
+        i += 10
+        sleep(0.5)
