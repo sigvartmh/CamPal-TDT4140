@@ -22,11 +22,12 @@ ratio = 4
 options = { "model": "./cfg/yolo-voc.cfg", "load": "./bin/yolo-voc.weights", "threshold": 0.5, "gpu": 1.0, "verbalise": False}
 
 class ObjectTracker():#threading.Thread):
-    def __init__(self, trackerQueue, resultQueue, tfFrame):
+    def __init__(self, trackerQueue, tfFrame, ready):
 #        super(ObjectTracker, self).__init__()
         self.trackerQueue=trackerQueue
         self.resultQueue=resultQueue
         self.tfFrame=tfFrame
+        self.ready = ready
         self.run()
 
     def run(self):
@@ -34,12 +35,12 @@ class ObjectTracker():#threading.Thread):
         try:
             while self.alive:
             #tfframe = self.trackerQueue.get()
+                ready.wait()
                 print("Taking camera frame")
                 frame = self.trackerQueue.get()
                 tfframe = cv2.resize(frame, (0,0), fx=1/ratio, fy=1/ratio)
-            #print(tfframe.shape)
                 result = self.tfnet.return_predict(tfframe)
-                self.resultQueue.put(result)
+                self.trackerQueue.put(result)
                 self.tfFrame.put(tfframe)
                 if not self.alive:
                     return
@@ -54,11 +55,11 @@ class ObjectTracker():#threading.Thread):
         self.alive = False
 
 class VideoCapture():
-    def __init__(self, trackerQueue, resultQueue, tfFrame, recordingEvent, newfileEvent, fileQ, posQ):
+    def __init__(self, trackerQueue, tFrameQueue, recordingEvent, newfileEvent, fileQ, posQ, ready):
 
-        self.trackerQueue = trackerQueue
-        self.resultQueue = resultQueue
-        self.tfFrame = tfFrame
+        self.trackerQ = trackerQueue
+        self.tFrameQ = tfFrame
+        self.ready = ready
 
         self.fileQ = fileQ
         self.recording = recordingEvent
@@ -150,22 +151,26 @@ class VideoCapture():
             return (pt1, pt2)
 
 if __name__ == '__main__':
+
     trackerQueue = Queue(1)
-    resultQueue = Queue(1)
+    tfFrameQueue = Queue(1)
+
     posQ = Queue(1)
     fileQ=Queue(1)
-    tfFrame = Queue()
+
     trackerReady = Event()
     startRecording = Event()
     newfile = Event()
+
     servo = Servo('/dev/tty.wchusbserial1420', posQ)
     g = GCalender("CamPal",startRecording, newfile, fileQ)
 
     calender=Process(target=g.start_calender_check)
-    tracker=Process(target=ObjectTracker, args=(trackerQueue,resultQueue,tfFrame))
+    tracker=Process(target=ObjectTracker, args=(trackerQueue,resultQueue,tfFrame, tfFrameQueue, trackerReady))
     servoProcess = Process(target=servo.run)
 
     calender.start()
     tracker.start()
     servoProcess.start()
-    VideoCapture(trackerQueue,resultQueue,tfFrame, startRecording, newfile, fileQ, posQ).run()
+
+    VideoCapture(trackerQueue, tfFrameQueue, startRecording, newfile, fileQ, posQ, trackerReady).run()
