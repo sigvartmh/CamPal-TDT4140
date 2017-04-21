@@ -51,21 +51,19 @@ class ObjectTracker():#threading.Thread):
 
     def stop(self):
         self.alive = False
-        #self.join()
-
 
 class VideoCapture():
-    def __init__(self, trackerQueue, resultQueue, tfFrame, startLock, endLock, recordingEvent, newfileEvent, fileQ, posQ):
+    def __init__(self, trackerQueue, resultQueue, tfFrame, recordingEvent, newfileEvent, fileQ, posQ):
+
         self.trackerQueue = trackerQueue
         self.resultQueue = resultQueue
         self.tfFrame = tfFrame
-        self.startLock = startLock
-        self.endLock = endLock
+
         self.fileQ = fileQ
         self.recording = recordingEvent
         self.newfile = newfileEvent
+
         self.posQ = posQ
-        #self.servo.move(str(90).encode('utf8'))
         self.pos = 90
     def run(self):
         self.setup()
@@ -156,16 +154,17 @@ if __name__ == '__main__':
     posQ = Queue(1)
     fileQ=Queue(1)
     tfFrame = Queue()
+    trackerReady = Event()
     startRecording = Event()
     newfile = Event()
-    startLock = RLock()
-    endLock = RLock()
     servo = Servo('/dev/tty.wchusbserial1420', posQ)
     g = GCalender("CamPal",startRecording, newfile, fileQ)
+
     calender=Process(target=g.start_calender_check)
     tracker=Process(target=ObjectTracker, args=(trackerQueue,resultQueue,tfFrame))
     servoProcess = Process(target=servo.run)
+
     calender.start()
     tracker.start()
     servoProcess.start()
-    VideoCapture(trackerQueue,resultQueue,tfFrame, startLock, endLock, startRecording, newfile, fileQ, posQ).run()
+    VideoCapture(trackerQueue,resultQueue,tfFrame, startRecording, newfile, fileQ, posQ).run()
