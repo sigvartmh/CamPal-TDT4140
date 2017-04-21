@@ -2,8 +2,8 @@ from youtube_upload import video_upload
 import argparse
 
 
-if __name__ == '__main__':
-
+#if __name__ == '__main__':
+def upload_to_youtube():
   a = argparse.Namespace() #ikke ror
   a.auth_host_name='localhost' #ikke ror
   a.auth_host_port=[8080, 8090] #ikke ror
